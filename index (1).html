@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>บันทึกเวลารอเอกซเรย์</title>
+<style>
+  :root{
+    --blue:#0b5cab; --blue-d:#083f77; --blue-l:#e8f1fb;
+    --bg:#f3f7fc; --surface:#ffffff; --line:#dbe6f2;
+    --ink:#12314f; --muted:#5f7590;
+    --ok:#12855a; --ok-bg:#dff3e8;
+    --over:#c0392b; --over-bg:#fbe4e2;
+    --amber:#b9770c;
+    --shadow:0 1px 2px rgba(12,49,84,.06), 0 4px 16px rgba(12,49,84,.06);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    font-family:"Sarabun","Segoe UI",Tahoma,system-ui,sans-serif;
+    background:var(--bg); color:var(--ink); line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px; margin:0 auto; padding:0 16px 64px}
+  header{background:linear-gradient(135deg,var(--blue),var(--blue-d));color:#fff;padding:18px 0;margin-bottom:20px;box-shadow:var(--shadow)}
+  header .wrap{padding-bottom:0}
+  .topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:12px}
+  .brand .logo{width:40px;height:40px;border-radius:10px;background:rgba(255,255,255,.16);display:grid;place-items:center;font-size:22px;flex:0 0 auto}
+  .brand h1{font-size:19px;margin:0;font-weight:700;letter-spacing:.2px}
+  .brand p{margin:2px 0 0;font-size:12.5px;opacity:.85}
+  .userbar{display:flex;align-items:center;gap:8px}
+  .syncbtn{appearance:none;border:0;cursor:pointer;font:inherit;font-weight:700;font-size:13px;padding:8px 14px;border-radius:10px;background:rgba(255,255,255,.16);color:#fff;display:inline-flex;align-items:center;gap:7px}
+  .syncbtn:hover{background:rgba(255,255,255,.26)}
+  .syncbtn .dot{width:8px;height:8px;border-radius:50%;background:#7ee2ad}
+  .syncbtn.pending .dot{background:#ffd36b}
+  .syncbtn.err .dot{background:#ff9d92}
+  .syncbtn.busy .dot{background:#cfe3ff;animation:pulse 1s infinite}
+  @keyframes pulse{50%{opacity:.3}}
+  .linkbtn{appearance:none;border:0;background:transparent;color:#fff;opacity:.85;cursor:pointer;font:inherit;font-size:13px;text-decoration:underline}
+  .synced-note{font-size:11.5px;opacity:.8;margin-top:6px;text-align:right}
+  .tabs{display:flex;gap:6px;margin-top:16px}
+  .tab{appearance:none;border:0;cursor:pointer;font:inherit;background:rgba(255,255,255,.12);color:#fff;opacity:.8;padding:10px 18px;border-radius:10px 10px 0 0;font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px}
+  .tab .num{background:rgba(255,255,255,.25);width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:12px}
+  .tab[aria-selected="true"]{background:var(--bg);color:var(--blue-d);opacity:1}
+  .tab[aria-selected="true"] .num{background:var(--blue);color:#fff}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:18px}
+  .card + .card{margin-top:16px}
+  .card h2{font-size:15px;margin:0 0 4px;font-weight:700}
+  .card .sub{color:var(--muted);font-size:12.5px;margin:0 0 14px}
+  .datebar{display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px}
+  .date-display{flex:1 1 240px}
+  .date-display .dow{font-size:12.5px;color:var(--muted)}
+  .date-display .big{font-size:26px;font-weight:700;line-height:1.15}
+  .date-pick{display:flex;flex-direction:column;gap:5px}
+  label.fld{font-size:12.5px;color:var(--muted);font-weight:600}
+  input[type=date],input[type=time],input[type=text],input[type=password]{font:inherit;padding:9px 11px;border:1.5px solid var(--line);border-radius:9px;background:#fff;color:var(--ink);width:100%}
+  input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-l)}
+  .btn{appearance:none;border:0;cursor:pointer;font:inherit;font-weight:700;padding:10px 18px;border-radius:10px;display:inline-flex;align-items:center;gap:8px}
+  .btn.primary{background:var(--blue);color:#fff}
+  .btn.primary:hover{background:var(--blue-d)}
+  .btn.ghost{background:var(--blue-l);color:var(--blue-d)}
+  .btn.ghost:hover{background:#d8e8fa}
+  .btn.block{width:100%;justify-content:center;padding:12px}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .form-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr auto;gap:12px;align-items:end;margin-top:16px}
+  .form-grid .fldwrap{display:flex;flex-direction:column;gap:5px}
+  .live{margin-top:12px;display:flex;align-items:center;gap:10px;min-height:24px}
+  .pill{font-size:13px;font-weight:700;padding:4px 12px;border-radius:999px}
+  .pill.ok{background:var(--ok-bg);color:var(--ok)}
+  .pill.over{background:var(--over-bg);color:var(--over)}
+  .pill.wait{background:#eef3f9;color:var(--muted)}
+  .err{color:var(--over);font-size:13px;font-weight:600}
+  .tablewrap{overflow-x:auto;margin-top:16px;border:1px solid var(--line);border-radius:12px}
+  table{border-collapse:collapse;width:100%;font-size:14px;min-width:520px}
+  th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{background:#f7fafd;color:var(--muted);font-weight:700;font-size:12.5px}
+  tbody tr:last-child td{border-bottom:0}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  .badge{display:inline-block;font-weight:700;font-size:13px;padding:3px 10px;border-radius:8px;font-variant-numeric:tabular-nums}
+  .badge.ok{background:var(--ok-bg);color:var(--ok)}
+  .badge.over{background:var(--over-bg);color:var(--over)}
+  .badge.muted{background:#eef3f9;color:var(--muted)}
+  .rowdel{appearance:none;border:0;background:transparent;cursor:pointer;color:var(--over);font-size:18px;line-height:1;padding:4px 8px;border-radius:8px}
+  .rowdel:hover{background:var(--over-bg)}
+  .cellinput{border:1.5px solid transparent;background:transparent;padding:6px 8px;border-radius:7px;font:inherit;color:var(--ink);width:100%;min-width:70px}
+  .cellinput:hover{background:#f4f8fc}
+  .cellinput:focus{outline:none;border-color:var(--blue);background:#fff;box-shadow:0 0 0 3px var(--blue-l)}
+  .cellinput.hn{min-width:90px}
+  .actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;margin-top:18px}
+  .count-note{color:var(--muted);font-size:13px}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow)}
+  .kpi .v{font-size:28px;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums}
+  .kpi .l{font-size:12.5px;color:var(--muted);margin-top:2px}
+  .kpi .v.small{font-size:22px}
+  .daycards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:6px}
+  .daycard{border:1px solid var(--line);border-radius:12px;padding:14px;background:#fff}
+  .daycard .d{font-weight:700;font-size:14px;margin-bottom:8px}
+  .daycard .stats{display:flex;gap:14px;flex-wrap:wrap}
+  .daycard .stat .n{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums}
+  .daycard .stat .k{font-size:11.5px;color:var(--muted)}
+  .daycard .pass{margin-top:10px;font-size:12.5px;font-weight:700}
+  .empty{text-align:center;color:var(--muted);padding:40px 16px}
+  .empty .big{font-size:40px}
+  .chartwrap{overflow-x:auto;margin-top:6px}
+  svg{display:block}
+  .hidden{display:none !important}
+  /* Login */
+  .loginwrap{min-height:100vh;display:grid;place-items:center;padding:24px;background:linear-gradient(135deg,#eaf2fb,#f3f7fc)}
+  .logincard{background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:28px;width:100%;max-width:380px}
+  .logincard .logo{width:52px;height:52px;border-radius:14px;background:var(--blue-l);display:grid;place-items:center;font-size:26px;margin:0 auto 14px}
+  .logincard h1{font-size:18px;text-align:center;margin:0 0 2px}
+  .logincard p.sub{text-align:center;color:var(--muted);font-size:13px;margin:0 0 20px}
+  .logincard .fldwrap{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+  .cfgtoggle{text-align:center;margin-top:14px}
+  .cfgtoggle button{appearance:none;border:0;background:transparent;color:var(--muted);cursor:pointer;font:inherit;font-size:12.5px;text-decoration:underline}
+  .cfgbox{margin-top:14px;padding-top:14px;border-top:1px dashed var(--line)}
+  @media(max-width:720px){
+    .form-grid{grid-template-columns:1fr 1fr}
+    .form-grid .fldwrap.hn{grid-column:1/-1}
+    .form-grid .btn{grid-column:1/-1;justify-content:center}
+    .kpis{grid-template-columns:1fr 1fr}
+    .date-display .big{font-size:22px}
+    .userbar{width:100%;justify-content:space-between}
+  }
+</style>
+</head>
+<body>
+
+<!-- ===================== LOGIN ===================== -->
+<div id="loginScreen" class="loginwrap">
+  <div class="logincard">
+    <div class="logo">🩻</div>
+    <h1>บันทึกเวลารอเอกซเรย์</h1>
+    <p class="sub">กลุ่มงานรังสีวิทยา</p>
+    <div class="fldwrap">
+      <label class="fld" for="pw">รหัสผ่านของแผนก</label>
+      <input type="password" id="pw" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')doLogin()" placeholder="กรอกรหัสผ่าน">
+    </div>
+    <div class="err hidden" id="loginErr" style="margin-bottom:12px"></div>
+    <button class="btn primary block" id="loginBtn" onclick="doLogin()">เข้าสู่ระบบ</button>
+
+    <div class="cfgtoggle"><button onclick="toggleCfg()">⚙ ตั้งค่าที่อยู่เซิร์ฟเวอร์ (ครั้งแรก)</button></div>
+    <div class="cfgbox hidden" id="cfgBox">
+      <div class="fldwrap">
+        <label class="fld" for="apiUrl">Apps Script Web App URL</label>
+        <input type="text" id="apiUrl" placeholder="https://script.google.com/macros/s/.../exec">
+      </div>
+      <button class="btn ghost block" onclick="saveApiUrl()">บันทึกที่อยู่</button>
+      <p class="sub" style="margin:10px 0 0">วางลิงก์ที่ได้จากการ Deploy Apps Script (ดูในคู่มือ) — ตั้งครั้งเดียว เครื่องนี้จะจำไว้</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== APP ===================== -->
+<div id="app" class="hidden">
+<header>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="brand">
+        <div class="logo">🩻</div>
+        <div>
+          <h1>บันทึกเวลารอเอกซเรย์</h1>
+          <p>กลุ่มงานรังสีวิทยา · เป้าหมายเวลารอ ≤ 15 นาที</p>
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div class="userbar">
+          <button class="syncbtn" id="syncBtn" onclick="syncNow(true)"><span class="dot"></span><span id="syncLabel">ซิงก์</span></button>
+          <button class="linkbtn" onclick="logout()">ออกจากระบบ</button>
+        </div>
+        <div class="synced-note" id="syncNote"></div>
+      </div>
+    </div>
+    <div class="tabs" role="tablist">
+      <button class="tab" id="tab-entry" role="tab" aria-selected="true" onclick="switchTab('entry')"><span class="num">1</span> กรอกข้อมูล</button>
+      <button class="tab" id="tab-summary" role="tab" aria-selected="false" onclick="switchTab('summary')"><span class="num">2</span> สรุปผล</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <!-- PAGE 1 -->
+  <section id="page-entry">
+    <div class="card">
+      <h2>วันที่บันทึก</h2>
+      <p class="sub">เลือกวันที่ที่ต้องการบันทึกย้อนหลัง แล้วกรอกข้อมูลผู้ป่วยทีละราย</p>
+      <div class="datebar">
+        <div class="date-display">
+          <div class="dow" id="dowLabel">—</div>
+          <div class="big" id="dateLabel">—</div>
+        </div>
+        <div class="date-pick">
+          <label class="fld" for="datePick">เลือกวันที่</label>
+          <input type="date" id="datePick" onchange="onDateChange(this.value)">
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="fldwrap hn">
+          <label class="fld" for="hn">HN</label>
+          <input type="text" id="hn" inputmode="numeric" autocomplete="off" placeholder="เช่น 0012345"
+                 onkeydown="if(event.key==='Enter')document.getElementById('startT').focus()">
+        </div>
+        <div class="fldwrap">
+          <label class="fld" for="startT">เวลาเริ่มรอ</label>
+          <input type="time" id="startT" oninput="updateLive()">
+        </div>
+        <div class="fldwrap">
+          <label class="fld" for="endT">เวลาเสร็จ</label>
+          <input type="time" id="endT" oninput="updateLive()" onkeydown="if(event.key==='Enter')saveEntry()">
+        </div>
+        <button class="btn primary" onclick="saveEntry()">＋ บันทึก</button>
+      </div>
+      <div class="live" id="liveBox">
+        <span class="pill wait" id="livePill">กรอกเวลาเริ่มและเวลาเสร็จ</span>
+        <span class="err hidden" id="formErr"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>รายการของวันนี้ <span id="dayCountBadge" class="badge ok" style="margin-left:6px">0 ราย</span></h2>
+      <p class="sub" id="daySubLabel">ยังไม่มีรายการ</p>
+      <div id="todayTable"></div>
+      <div class="actions">
+        <span class="count-note" id="saveState">บันทึกในเครื่องแล้ว</span>
+        <button class="btn ghost" onclick="nextDay()">ถัดไป (วันถัดไป) →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- PAGE 2 -->
+  <section id="page-summary" class="hidden">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+        <div><h2>ภาพรวมทั้งหมด</h2><p class="sub" style="margin:0">สรุปจากข้อมูลที่บันทึกไว้ทั้งหมด</p></div>
+        <button class="btn primary" onclick="exportXlsx()">⬇ ส่งออก Excel (.xlsx)</button>
+      </div>
+      <div class="kpis" id="kpis" style="margin-top:14px"></div>
+    </div>
+    <div class="card">
+      <h2>เวลารอเฉลี่ยรายวัน</h2>
+      <p class="sub">เส้นประคือเป้าหมาย 15 นาที · แท่งสีเขียว = ถึงเป้า, สีแดง = เกินเป้า</p>
+      <div class="chartwrap" id="chart"></div>
+    </div>
+    <div class="card">
+      <h2>สรุปแยกรายวัน</h2>
+      <p class="sub">จำนวนผู้ป่วยและสถิติเวลารอในแต่ละวัน</p>
+      <div class="daycards" id="daycards"></div>
+    </div>
+    <div class="card">
+      <h2>ตารางรวมทุกวัน</h2>
+      <p class="sub">แก้ไข HN / เวลา ได้โดยคลิกที่ช่อง · เวลารอคำนวณให้อัตโนมัติ · กด 🗑 เพื่อลบ · อย่าลืมกดซิงก์</p>
+      <div id="allTable"></div>
+    </div>
+  </section>
+</div>
+</div>
+
+<script>
+/* ============================================================
+   ค่าคงที่
+   ============================================================ */
+const K_URL='xray_api_url', K_TOKEN='xray_token', K_DATA='xray_wait_v2', K_LAST='xray_last_sync';
+const TARGET=15;
+const TH_MONTH=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+const TH_MON_SHORT=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+const TH_DOW=['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
+
+let records = loadData();     // [{id,date,hn,start,end,updatedAt,deleted,synced}]
+let currentDate = todayISO();
+let token = loadToken();
+let apiUrl = localStorage.getItem(K_URL) || '';
+let lastSync = Number(localStorage.getItem(K_LAST)||0);
+let syncing = false;
+
+/* ============================================================
+   โหลด/บันทึกในเครื่อง + ย้ายข้อมูลเก่า v1
+   ============================================================ */
+function loadData(){
+  try{ const a=JSON.parse(localStorage.getItem(K_DATA)); if(Array.isArray(a)) return a; }catch(e){}
+  // migrate v1 (state.days)
+  try{
+    const old=JSON.parse(localStorage.getItem('xray_wait_v1'));
+    if(old&&old.days){
+      const out=[];
+      Object.keys(old.days).forEach(dk=>old.days[dk].forEach(r=>out.push(
+        {id:r.id||uid(),date:dk,hn:r.hn,start:r.start,end:r.end,updatedAt:nowISO(),deleted:false,synced:false})));
+      return out;
+    }
+  }catch(e){}
+  return [];
+}
+function persist(){ try{ localStorage.setItem(K_DATA,JSON.stringify(records)); }catch(e){ flashSave('⚠ พื้นที่เต็ม'); } }
+function loadToken(){ try{ const t=JSON.parse(localStorage.getItem(K_TOKEN)); if(t&&t.token&&t.exp>Date.now()) return t.token; }catch(e){} return null; }
+function saveToken(t,exp){ token=t; localStorage.setItem(K_TOKEN,JSON.stringify({token:t,exp})); }
+function flashSave(msg){
+  const el=document.getElementById('saveState'); if(!el) return;
+  el.textContent=msg||'✓ บันทึกในเครื่องแล้ว'; el.style.color='var(--ok)';
+  clearTimeout(flashSave._t); flashSave._t=setTimeout(()=>{el.style.color='var(--muted)';el.textContent='บันทึกในเครื่องแล้ว';},1500);
+}
+
+/* ============================================================
+   ยูทิลิตี้วันที่/เวลา
+   ============================================================ */
+function todayISO(){ return iso(new Date()); }
+function iso(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function nowISO(){ return new Date().toISOString(); }
+function parseISO(s){ const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d); }
+function addDaysISO(s,n){ const d=parseISO(s); d.setDate(d.getDate()+n); return iso(d); }
+function thaiFull(s){ const d=parseISO(s); return d.getDate()+' '+TH_MONTH[d.getMonth()]+' '+(d.getFullYear()+543); }
+function thaiShort(s){ const d=parseISO(s); return d.getDate()+' '+TH_MON_SHORT[d.getMonth()]+' '+(d.getFullYear()+543); }
+function thaiDow(s){ return 'วัน'+TH_DOW[parseISO(s).getDay()]; }
+function waitMin(start,end){ if(!start||!end) return null; const [sh,sm]=start.split(':').map(Number); const [eh,em]=end.split(':').map(Number); return (eh*60+em)-(sh*60+sm); }
+function uid(){ return 'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+
+/* ============================================================
+   มุมมองข้อมูล
+   ============================================================ */
+function activeRecs(){ return records.filter(r=>!r.deleted); }
+function recsForDate(d){ return activeRecs().filter(r=>r.date===d); }
+function pendingCount(){ return records.filter(r=>!r.synced).length; }
+
+/* ============================================================
+   API (Apps Script)
+   ============================================================ */
+async function api(action, payload){
+  if(!apiUrl) throw new Error('ยังไม่ได้ตั้งค่าที่อยู่เซิร์ฟเวอร์');
+  const body=JSON.stringify(Object.assign({action, token}, payload||{}));
+  let res;
+  try{ res=await fetch(apiUrl,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body,redirect:'follow'}); }
+  catch(e){ throw new Error('เชื่อมต่อไม่ได้ (ตรวจอินเทอร์เน็ต/ที่อยู่เซิร์ฟเวอร์)'); }
+  let data; try{ data=await res.json(); }catch(e){ throw new Error('เซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง'); }
+  if(!data.ok) throw new Error(data.error||'ผิดพลาด');
+  return data;
+}
+
+/* ============================================================
+   Login
+   ============================================================ */
+function toggleCfg(){ document.getElementById('cfgBox').classList.toggle('hidden'); document.getElementById('apiUrl').value=apiUrl; }
+function saveApiUrl(){
+  const v=document.getElementById('apiUrl').value.trim();
+  if(!v){ return; }
+  apiUrl=v; localStorage.setItem(K_URL,v);
+  document.getElementById('cfgBox').classList.add('hidden');
+  showLoginErr('บันทึกที่อยู่แล้ว — กรอกรหัสผ่านเพื่อเข้าสู่ระบบ', true);
+}
+function showLoginErr(msg,okStyle){
+  const e=document.getElementById('loginErr');
+  if(!msg){ e.classList.add('hidden'); return; }
+  e.textContent=msg; e.classList.remove('hidden'); e.style.color=okStyle?'var(--ok)':'var(--over)';
+}
+async function doLogin(){
+  const pw=document.getElementById('pw').value;
+  showLoginErr('');
+  if(!apiUrl){ showLoginErr('ยังไม่ได้ตั้งค่าที่อยู่เซิร์ฟเวอร์ (กดปุ่มตั้งค่าด้านล่าง)'); document.getElementById('cfgBox').classList.remove('hidden'); return; }
+  if(!pw){ showLoginErr('กรุณากรอกรหัสผ่าน'); return; }
+  const btn=document.getElementById('loginBtn'); btn.disabled=true; btn.textContent='กำลังเข้าสู่ระบบ…';
+  try{
+    const d=await api('login',{password:pw});
+    saveToken(d.token, d.exp||(Date.now()+1000*60*60*12));
+    document.getElementById('pw').value='';
+    enterApp();
+  }catch(err){
+    showLoginErr(err.message==='bad_password'?'รหัสผ่านไม่ถูกต้อง':
+                 err.message==='no_password_set'?'ยังไม่ได้ตั้งรหัสผ่านในเซิร์ฟเวอร์ (ดูคู่มือ)':err.message);
+  }finally{ btn.disabled=false; btn.textContent='เข้าสู่ระบบ'; }
+}
+function logout(){
+  token=null; localStorage.removeItem(K_TOKEN);
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('loginScreen').classList.remove('hidden');
+}
+function enterApp(){
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  renderEntry(); updateSyncUI();
+  syncNow(false); // ลองซิงก์อัตโนมัติเงียบๆ
+}
+
+/* ============================================================
+   ซิงก์
+   ============================================================ */
+function toWire(r){ return {id:r.id,date:r.date,hn:r.hn,start:r.start,end:r.end,minutes:waitMin(r.start,r.end),updatedAt:r.updatedAt||nowISO(),deleted:!!r.deleted}; }
+function fromWire(r){ return {id:String(r.id),date:String(r.date),hn:String(r.hn),start:String(r.start),end:String(r.end),updatedAt:String(r.updatedAt||''),deleted:false,synced:true}; }
+
+async function syncNow(manual){
+  if(syncing||!token){ return; }
+  syncing=true; updateSyncUI('busy');
+  try{
+    const dirty=records.filter(r=>!r.synced);
+    if(dirty.length){
+      await api('upsert',{records:dirty.map(toWire)});
+      dirty.forEach(r=>r.synced=true);
+    }
+    const res=await api('list',{});
+    const server=(res.rows||[]).map(fromWire);
+    const byId=new Map(server.map(r=>[r.id,r]));
+    records.filter(r=>!r.synced).forEach(r=>byId.set(r.id,r)); // ของที่ยังไม่ซิงก์ในเครื่องชนะ
+    records=[...byId.values()];
+    lastSync=Date.now(); localStorage.setItem(K_LAST,String(lastSync));
+    persist(); rerenderAll(); updateSyncUI('ok');
+  }catch(err){
+    updateSyncUI('err');
+    if(err.message==='auth'){ logout(); return; }
+    if(manual) alert('ซิงก์ไม่สำเร็จ: '+err.message+'\n\nข้อมูลยังอยู่ครบในเครื่อง กดซิงก์ใหม่ได้ภายหลัง');
+  }finally{ syncing=false; }
+}
+function updateSyncUI(stateName){
+  const btn=document.getElementById('syncBtn'), label=document.getElementById('syncLabel'), note=document.getElementById('syncNote');
+  if(!btn) return;
+  const pend=pendingCount();
+  btn.classList.remove('pending','err','busy');
+  if(stateName==='busy'){ btn.classList.add('busy'); label.textContent='กำลังซิงก์…'; }
+  else if(stateName==='err'){ btn.classList.add('err'); label.textContent='ซิงก์ (ลองใหม่)'; }
+  else if(pend>0){ btn.classList.add('pending'); label.textContent='ซิงก์ ('+pend+' รอ)'; }
+  else{ label.textContent='ซิงก์แล้ว'; }
+  note.textContent = lastSync? ('ซิงก์ล่าสุด '+new Date(lastSync).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'})) : (pend?('มี '+pend+' รายการรอซิงก์'):'');
+}
+function rerenderAll(){
+  renderEntry();
+  if(!document.getElementById('page-summary').classList.contains('hidden')) renderSummary();
+  updateSyncUI();
+}
+
+/* ============================================================
+   แท็บ
+   ============================================================ */
+function switchTab(t){
+  const entry=t==='entry';
+  document.getElementById('page-entry').classList.toggle('hidden',!entry);
+  document.getElementById('page-summary').classList.toggle('hidden',entry);
+  document.getElementById('tab-entry').setAttribute('aria-selected',entry);
+  document.getElementById('tab-summary').setAttribute('aria-selected',!entry);
+  if(!entry) renderSummary();
+}
+
+/* ============================================================
+   หน้ากรอกข้อมูล
+   ============================================================ */
+function renderDateHeader(){
+  document.getElementById('dowLabel').textContent=thaiDow(currentDate);
+  document.getElementById('dateLabel').textContent=thaiFull(currentDate);
+  document.getElementById('datePick').value=currentDate;
+}
+function onDateChange(v){ if(!v)return; currentDate=v; clearForm(); renderEntry(); }
+function nextDay(){ currentDate=addDaysISO(currentDate,1); clearForm(); renderEntry(); document.getElementById('hn').focus(); }
+function clearForm(){ document.getElementById('hn').value=''; document.getElementById('startT').value=''; document.getElementById('endT').value=''; updateLive(); showErr(''); }
+function showErr(msg){ const e=document.getElementById('formErr'); if(msg){e.textContent=msg;e.classList.remove('hidden');}else{e.textContent='';e.classList.add('hidden');} }
+function updateLive(){
+  const s=document.getElementById('startT').value,e=document.getElementById('endT').value;
+  const pill=document.getElementById('livePill'); const m=waitMin(s,e);
+  if(m===null){ pill.className='pill wait'; pill.textContent='กรอกเวลาเริ่มและเวลาเสร็จ'; return; }
+  if(m<0){ pill.className='pill over'; pill.textContent='เวลาเสร็จต้องมากกว่าเวลาเริ่ม'; return; }
+  const ok=m<=TARGET; pill.className='pill '+(ok?'ok':'over');
+  pill.textContent='รอ '+m+' นาที'+(ok?' · ถึงเป้า ✓':' · เกินเป้า');
+}
+function saveEntry(){
+  const hn=document.getElementById('hn').value.trim();
+  const s=document.getElementById('startT').value, e=document.getElementById('endT').value;
+  showErr('');
+  if(!hn){ showErr('กรุณากรอก HN'); document.getElementById('hn').focus(); return; }
+  if(!s||!e){ showErr('กรุณากรอกเวลาเริ่มและเวลาเสร็จ'); return; }
+  const m=waitMin(s,e);
+  if(m<0){ showErr('เวลาเสร็จต้องมากกว่าเวลาเริ่ม (ไม่รองรับข้ามเที่ยงคืน)'); return; }
+  if(recsForDate(currentDate).some(r=>r.hn===hn)){
+    if(!confirm('HN '+hn+' มีอยู่แล้วในวันนี้ ต้องการบันทึกซ้ำหรือไม่?')) return;
+  }
+  records.push({id:uid(),date:currentDate,hn,start:s,end:e,updatedAt:nowISO(),deleted:false,synced:false});
+  persist(); flashSave(); clearForm(); renderEntry(); updateSyncUI();
+  document.getElementById('hn').focus();
+  scheduleAutoSync();
+}
+function deleteEntry(id){
+  const r=records.find(x=>x.id===id); if(!r) return;
+  if(r.synced){ r.deleted=true; r.synced=false; r.updatedAt=nowISO(); } // tombstone เพื่อลบบน Sheet
+  else{ records=records.filter(x=>x.id!==id); }                        // ยังไม่เคยขึ้น Sheet ลบทิ้งเลย
+  persist(); rerenderAll(); scheduleAutoSync();
+}
+function editRec(id,field,val){
+  const r=records.find(x=>x.id===id); if(!r) return;
+  r[field]= field==='hn'?val.trim():val; r.updatedAt=nowISO(); r.synced=false;
+  persist(); renderSummary(); if(!document.getElementById('page-entry').classList.contains('hidden')) renderEntry();
+  updateSyncUI(); scheduleAutoSync();
+}
+let _autoT=null;
+function scheduleAutoSync(){ clearTimeout(_autoT); _autoT=setTimeout(()=>syncNow(false),4000); }
+
+function renderEntry(){
+  renderDateHeader();
+  const list=recsForDate(currentDate);
+  const badge=document.getElementById('dayCountBadge');
+  badge.textContent=list.length+' ราย'; badge.className='badge ok';
+  const sub=document.getElementById('daySubLabel'), host=document.getElementById('todayTable');
+  if(list.length===0){ sub.textContent='ยังไม่มีรายการ — กรอกด้านบนแล้วกดบันทึก'; host.innerHTML='<div class="empty"><div class="big">📋</div>ยังไม่มีรายการในวันนี้</div>'; return; }
+  const nOk=list.filter(r=>{const m=waitMin(r.start,r.end);return m!=null&&m<=TARGET;}).length;
+  sub.textContent='ถึงเป้า '+nOk+' / '+list.length+' ราย';
+  let rows='';
+  list.forEach((r,i)=>{
+    const m=waitMin(r.start,r.end), ok=m<=TARGET;
+    rows+=`<tr><td class="num">${i+1}</td><td>${esc(r.hn)}</td><td class="num">${r.start}</td><td class="num">${r.end}</td>
+      <td class="num"><span class="badge ${ok?'ok':'over'}">${m} นาที</span></td>
+      <td style="text-align:center"><button class="rowdel" title="ลบ" onclick="deleteEntry('${r.id}')">🗑</button></td></tr>`;
+  });
+  host.innerHTML=`<div class="tablewrap"><table><thead><tr><th class="num">#</th><th>HN</th><th class="num">เริ่มรอ</th><th class="num">เสร็จ</th><th class="num">เวลารอ</th><th style="text-align:center">ลบ</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+/* ============================================================
+   หน้าสรุปผล
+   ============================================================ */
+function flatValid(){ return activeRecs().map(r=>({...r,min:waitMin(r.start,r.end)})).filter(r=>r.min!=null&&r.min>=0).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:(a.start<b.start?-1:1)); }
+function dayStats(){
+  const by={}; flatValid().forEach(r=>{(by[r.date]=by[r.date]||[]).push(r.min);});
+  return Object.keys(by).sort().map(d=>{ const m=by[d]; const n=m.length; const sum=m.reduce((a,b)=>a+b,0);
+    return {date:d,n,avg:sum/n,max:Math.max(...m),min:Math.min(...m),pass:m.filter(x=>x<=TARGET).length}; });
+}
+function renderSummary(){
+  const flat=flatValid(), stats=dayStats();
+  const totalRec=flat.length, totalDays=stats.length;
+  const overallAvg=totalRec?flat.reduce((a,b)=>a+b.min,0)/totalRec:0;
+  const passCnt=flat.filter(r=>r.min<=TARGET).length, passPct=totalRec?Math.round(passCnt/totalRec*100):0;
+  document.getElementById('kpis').innerHTML=`
+    <div class="kpi"><div class="v">${totalDays}</div><div class="l">วันที่บันทึก</div></div>
+    <div class="kpi"><div class="v">${totalRec}</div><div class="l">ผู้ป่วยทั้งหมด (ราย)</div></div>
+    <div class="kpi"><div class="v" style="color:${overallAvg<=TARGET?'var(--ok)':'var(--over)'}">${fmt1(overallAvg)}</div><div class="l">เวลารอเฉลี่ย (นาที)</div></div>
+    <div class="kpi"><div class="v small" style="color:${passPct>=80?'var(--ok)':'var(--amber)'}">${passPct}%</div><div class="l">ถึงเป้า ≤15 นาที (${passCnt}/${totalRec})</div></div>`;
+  renderChart(stats); renderDayCards(stats); renderAllTable();
+}
+function renderDayCards(stats){
+  const host=document.getElementById('daycards');
+  if(stats.length===0){ host.innerHTML='<div class="empty"><div class="big">📊</div>ยังไม่มีข้อมูล ไปที่หน้ากรอกข้อมูลเพื่อเริ่มบันทึก</div>'; return; }
+  host.innerHTML=stats.map(s=>{ const pass=s.n?Math.round(s.pass/s.n*100):0, ok=s.avg<=TARGET;
+    return `<div class="daycard"><div class="d">${thaiShort(s.date)} <span style="color:var(--muted);font-weight:400">(${thaiDow(s.date)})</span></div>
+      <div class="stats">
+        <div class="stat"><div class="n">${s.n}</div><div class="k">ราย</div></div>
+        <div class="stat"><div class="n" style="color:${ok?'var(--ok)':'var(--over)'}">${fmt1(s.avg)}</div><div class="k">เฉลี่ย (นาที)</div></div>
+        <div class="stat"><div class="n">${s.min}</div><div class="k">ต่ำสุด</div></div>
+        <div class="stat"><div class="n">${s.max}</div><div class="k">สูงสุด</div></div>
+      </div><div class="pass" style="color:${pass>=80?'var(--ok)':'var(--amber)'}">ถึงเป้า ${s.pass}/${s.n} (${pass}%)</div></div>`;
+  }).join('');
+}
+function renderChart(stats){
+  const host=document.getElementById('chart');
+  if(stats.length===0){ host.innerHTML='<div class="empty">ยังไม่มีข้อมูลสำหรับแสดงกราฟ</div>'; return; }
+  const Wb=54,gap=18,padL=44,padR=16,padT=16,padB=52,H=240,plotH=H-padT-padB;
+  const maxV=Math.max(TARGET,...stats.map(s=>s.avg))*1.15;
+  const W=padL+padR+stats.length*Wb+(stats.length-1)*gap;
+  const y=v=>padT+plotH-(v/maxV)*plotH, targetY=y(TARGET);
+  let grid=''; const step=maxV<=20?5:(maxV<=60?10:20);
+  for(let g=0;g<=maxV;g+=step){ const gy=y(g); grid+=`<line x1="${padL}" y1="${gy}" x2="${W-padR}" y2="${gy}" stroke="#eef3f9"/><text x="${padL-8}" y="${gy+4}" text-anchor="end" font-size="11" fill="#5f7590">${g}</text>`; }
+  let bars='';
+  stats.forEach((s,i)=>{ const x=padL+i*(Wb+gap), bh=Math.max(2,(s.avg/maxV)*plotH), by=padT+plotH-bh, ok=s.avg<=TARGET;
+    const col=ok?'#12855a':'#c0392b', colBg=ok?'#dff3e8':'#fbe4e2';
+    bars+=`<rect x="${x}" y="${padT}" width="${Wb}" height="${plotH}" fill="${colBg}" opacity=".35" rx="6"/><rect x="${x}" y="${by}" width="${Wb}" height="${bh}" fill="${col}" rx="6"/>
+      <text x="${x+Wb/2}" y="${by-6}" text-anchor="middle" font-size="12" font-weight="700" fill="${col}">${fmt1(s.avg)}</text>
+      <text x="${x+Wb/2}" y="${H-padB+18}" text-anchor="middle" font-size="11" fill="#12314f">${thaiShort(s.date).replace(/ \d{4}$/,'')}</text>
+      <text x="${x+Wb/2}" y="${H-padB+33}" text-anchor="middle" font-size="10" fill="#5f7590">${s.n} ราย</text>`; });
+  const tl=`<line x1="${padL}" y1="${targetY}" x2="${W-padR}" y2="${targetY}" stroke="#083f77" stroke-width="1.5" stroke-dasharray="6 4"/><text x="${W-padR}" y="${targetY-6}" text-anchor="end" font-size="11" font-weight="700" fill="#083f77">เป้าหมาย ${TARGET} นาที</text>`;
+  host.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${Math.max(W,320)}" height="${H}" role="img" aria-label="กราฟเวลารอเฉลี่ยรายวัน">${grid}${bars}${tl}</svg>`;
+}
+function renderAllTable(){
+  const flat=flatValid(); const host=document.getElementById('allTable');
+  if(flat.length===0){ host.innerHTML='<div class="empty"><div class="big">🗂️</div>ยังไม่มีรายการ</div>'; return; }
+  let rows='';
+  flat.forEach(r=>{ const m=r.min, ok=m<=TARGET;
+    rows+=`<tr><td>${thaiShort(r.date)}</td>
+      <td><input class="cellinput hn" value="${esc(r.hn)}" onchange="editRec('${r.id}','hn',this.value)"></td>
+      <td><input class="cellinput" type="time" value="${r.start}" onchange="editRec('${r.id}','start',this.value)"></td>
+      <td><input class="cellinput" type="time" value="${r.end}" onchange="editRec('${r.id}','end',this.value)"></td>
+      <td class="num"><span class="badge ${ok?'ok':'over'}">${m} นาที</span></td>
+      <td style="text-align:center"><button class="rowdel" title="ลบ" onclick="deleteEntry('${r.id}')">🗑</button></td></tr>`; });
+  host.innerHTML=`<div class="tablewrap"><table><thead><tr><th>วันที่</th><th>HN</th><th>เริ่มรอ</th><th>เสร็จ</th><th class="num">เวลารอ</th><th style="text-align:center">ลบ</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+/* ============================================================
+   ตัวช่วย
+   ============================================================ */
+function fmt1(n){ return (Math.round(n*10)/10).toLocaleString('en-US',{maximumFractionDigits:1}); }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+/* ============================================================
+   ส่งออก Excel (.xlsx) — ออฟไลน์ ไม่พึ่งไลบรารีภายนอก
+   ============================================================ */
+const CRC_TABLE=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0;}return t;})();
+function crc32(b){let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=CRC_TABLE[(c^b[i])&0xFF]^(c>>>8);return (c^0xFFFFFFFF)>>>0;}
+function zipStore(files){
+  const enc=new TextEncoder(), u16=n=>[n&0xFF,(n>>>8)&0xFF], u32=n=>[n&0xFF,(n>>>8)&0xFF,(n>>>16)&0xFF,(n>>>24)&0xFF];
+  const chunks=[],central=[]; let off=0;
+  for(const f of files){ const name=enc.encode(f.name),data=f.bytes,crc=crc32(data),sz=data.length;
+    const lfh=new Uint8Array([].concat(u32(0x04034b50),u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(sz),u32(sz),u16(name.length),u16(0)));
+    chunks.push(lfh,name,data); const lo=off; off+=lfh.length+name.length+sz;
+    central.push(new Uint8Array([].concat(u32(0x02014b50),u16(20),u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(sz),u32(sz),u16(name.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(lo))),name);
+  }
+  let cs=0; central.forEach(a=>cs+=a.length); const co=off;
+  const eocd=new Uint8Array([].concat(u32(0x06054b50),u16(0),u16(0),u16(files.length),u16(files.length),u32(cs),u32(co),u16(0)));
+  const all=[...chunks,...central,eocd]; let tot=0; all.forEach(a=>tot+=a.length);
+  const out=new Uint8Array(tot); let p=0; for(const a of all){out.set(a,p);p+=a.length;} return out;
+}
+function xmlEsc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function colL(n){let s='';n++;while(n>0){const m=(n-1)%26;s=String.fromCharCode(65+m)+s;n=Math.floor((n-1)/26);}return s;}
+function cellXml(ref,cell){ if(cell==null||cell.v==null||cell.v===''){return `<c r="${ref}"${cell&&cell.s?` s="${cell.s}"`:''}/>`;}
+  const s=cell.s?` s="${cell.s}"`:''; if(cell.t==='n')return `<c r="${ref}"${s}><v>${cell.v}</v></c>`;
+  return `<c r="${ref}"${s} t="inlineStr"><is><t xml:space="preserve">${xmlEsc(cell.v)}</t></is></c>`; }
+function sheetXml(rows){ let b=''; rows.forEach((row,ri)=>{let c='';row.forEach((cell,ci)=>{c+=cellXml(colL(ci)+(ri+1),cell);});b+=`<row r="${ri+1}">${c}</row>`;});
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${b}</sheetData></worksheet>`; }
+const CS=v=>({v,t:'s'}),CN=v=>({v,t:'n'}),CH=v=>({v,t:'s',s:1}),CNc=(v,ok)=>({v,t:'n',s:ok?2:3});
+function exportXlsx(){
+  const flat=flatValid(); if(flat.length===0){ alert('ยังไม่มีข้อมูลสำหรับส่งออก'); return; }
+  const stats=dayStats();
+  const raw=[[CH('วันที่'),CH('HN'),CH('เวลาเริ่มรอ'),CH('เวลาเสร็จ'),CH('เวลารอ (นาที)'),CH('สถานะเทียบเป้า')]];
+  flat.forEach(r=>{const ok=r.min<=TARGET;raw.push([CS(thaiShort(r.date)),CS(r.hn),CS(r.start),CS(r.end),CNc(r.min,ok),CS(ok?'ถึงเป้า':'เกินเป้า')]);});
+  const sum=[[CH('วันที่'),CH('จำนวน (ราย)'),CH('เฉลี่ย (นาที)'),CH('สูงสุด'),CH('ต่ำสุด'),CH('ถึงเป้า (ราย)'),CH('% ถึงเป้า')]];
+  let tN=0,tSum=0,tPass=0;
+  stats.forEach(s=>{const avg=Math.round(s.avg*10)/10; sum.push([CS(thaiShort(s.date)),CN(s.n),CNc(avg,s.avg<=TARGET),CN(s.max),CN(s.min),CN(s.pass),CS(s.n?Math.round(s.pass/s.n*100)+'%':'-')]); tN+=s.n;tSum+=s.avg*s.n;tPass+=s.pass;});
+  const gAvg=tN?Math.round(tSum/tN*10)/10:0;
+  sum.push([CH('รวมทั้งหมด'),{v:tN,t:'n',s:1},CNc(gAvg,gAvg<=TARGET),CS(''),CS(''),{v:tPass,t:'n',s:1},{v:tN?Math.round(tPass/tN*100)+'%':'-',t:'s',s:1}]);
+  const enc=s=>new TextEncoder().encode(s);
+  const styles=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Tahoma"/></font><font><b/><sz val="11"/><name val="Tahoma"/></font></fonts><fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFDFF3E8"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFBE4E2"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="0" fontId="0" fillId="2" borderId="0" xfId="0" applyFill="1"/><xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0" applyFill="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+  const ct=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`;
+  const rr=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
+  const wb=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="รายการดิบ" sheetId="1" r:id="rId1"/><sheet name="สรุปรายวัน" sheetId="2" r:id="rId2"/></sheets></workbook>`;
+  const wr=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
+  const files=[
+    {name:'[Content_Types].xml',bytes:enc(ct)},{name:'_rels/.rels',bytes:enc(rr)},
+    {name:'xl/workbook.xml',bytes:enc(wb)},{name:'xl/_rels/workbook.xml.rels',bytes:enc(wr)},
+    {name:'xl/styles.xml',bytes:enc(styles)},
+    {name:'xl/worksheets/sheet1.xml',bytes:enc(sheetXml(raw))},{name:'xl/worksheets/sheet2.xml',bytes:enc(sheetXml(sum))},
+  ];
+  const blob=new Blob([zipStore(files)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='เวลารอเอกซเรย์_'+todayISO()+'.xlsx';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+
+/* ============================================================
+   เริ่มต้น
+   ============================================================ */
+(function init(){
+  if(token){ enterApp(); }
+  else{ document.getElementById('loginScreen').classList.remove('hidden');
+        if(!apiUrl){ document.getElementById('cfgBox').classList.remove('hidden'); } }
+})();
+</script>
+</body>
+</html>
