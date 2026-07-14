@@ -240,8 +240,8 @@
       <div class="kpis" id="kpis" style="margin-top:14px"></div>
     </div>
     <div class="card">
-      <h2>เวลารอเฉลี่ยรายวัน</h2>
-      <p class="sub">เส้นประคือเป้าหมาย 15 นาที · แท่งสีเขียว = ถึงเป้า, สีแดง = เกินเป้า</p>
+      <h2>เวลารอเฉลี่ยรายสัปดาห์</h2>
+      <p class="sub">เส้นประคือเป้าหมาย 15 นาที · แท่งสีเขียว = ถึงเป้า, สีแดง = เกินเป้า · แต่ละสัปดาห์เริ่มวันจันทร์</p>
       <div class="chartwrap" id="chart"></div>
     </div>
     <div class="card">
@@ -314,6 +314,23 @@ function thaiShort(s){ const d=parseISO(s); return d.getDate()+' '+TH_MON_SHORT[
 function thaiDow(s){ return 'วัน'+TH_DOW[parseISO(s).getDay()]; }
 function waitMin(start,end){ if(!start||!end) return null; const [sh,sm]=start.split(':').map(Number); const [eh,em]=end.split(':').map(Number); return (eh*60+em)-(sh*60+sm); }
 function uid(){ return 'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+
+/* วันจันทร์แรกของสัปดาห์ที่มีวันที่ s อยู่ (สัปดาห์เริ่มวันจันทร์) */
+function weekStartISO(s){
+  const d=parseISO(s); const dow=d.getDay(); // 0=อาทิตย์..6=เสาร์
+  const diff=(dow===0? -6 : 1-dow);
+  d.setDate(d.getDate()+diff);
+  return iso(d);
+}
+/* ป้ายกำกับช่วงสัปดาห์ เช่น "7-13 ก.ค. 68" หรือ "29 มิ.ย. - 5 ก.ค. 68" */
+function weekLabel(startS,endS){
+  const ds=parseISO(startS), de=parseISO(endS);
+  const yearShort=String((de.getFullYear()+543)%100).padStart(2,'0');
+  if(ds.getMonth()===de.getMonth()){
+    return ds.getDate()+'-'+de.getDate()+' '+TH_MON_SHORT[de.getMonth()]+' '+yearShort;
+  }
+  return ds.getDate()+' '+TH_MON_SHORT[ds.getMonth()]+' - '+de.getDate()+' '+TH_MON_SHORT[de.getMonth()]+' '+yearShort;
+}
 
 /* ============================================================
    มุมมองข้อมูล
@@ -516,6 +533,12 @@ function dayStats(){
   return Object.keys(by).sort().map(d=>{ const m=by[d]; const n=m.length; const sum=m.reduce((a,b)=>a+b,0);
     return {date:d,n,avg:sum/n,max:Math.max(...m),min:Math.min(...m),pass:m.filter(x=>x<=TARGET).length}; });
 }
+function weekStats(){
+  const by={};
+  flatValid().forEach(r=>{ const wk=weekStartISO(r.date); (by[wk]=by[wk]||[]).push(r.min); });
+  return Object.keys(by).sort().map(wk=>{ const m=by[wk]; const n=m.length; const sum=m.reduce((a,b)=>a+b,0); const wkEnd=addDaysISO(wk,6);
+    return {weekStart:wk,weekEnd:wkEnd,n,avg:sum/n,max:Math.max(...m),min:Math.min(...m),pass:m.filter(x=>x<=TARGET).length}; });
+}
 function renderSummary(){
   const flat=flatValid(), stats=dayStats();
   const totalRec=flat.length, totalDays=stats.length;
@@ -526,7 +549,7 @@ function renderSummary(){
     <div class="kpi"><div class="v">${totalRec}</div><div class="l">ผู้ป่วยทั้งหมด (ราย)</div></div>
     <div class="kpi"><div class="v" style="color:${overallAvg<=TARGET?'var(--ok)':'var(--over)'}">${fmt1(overallAvg)}</div><div class="l">เวลารอเฉลี่ย (นาที)</div></div>
     <div class="kpi"><div class="v small" style="color:${passPct>=80?'var(--ok)':'var(--amber)'}">${passPct}%</div><div class="l">ถึงเป้า ≤15 นาที (${passCnt}/${totalRec})</div></div>`;
-  renderChart(stats); renderDayCards(stats); renderAllTable();
+  renderChart(weekStats()); renderDayCards(stats); renderAllTable();
 }
 function renderDayCards(stats){
   const host=document.getElementById('daycards');
@@ -544,7 +567,7 @@ function renderDayCards(stats){
 function renderChart(stats){
   const host=document.getElementById('chart');
   if(stats.length===0){ host.innerHTML='<div class="empty">ยังไม่มีข้อมูลสำหรับแสดงกราฟ</div>'; return; }
-  const Wb=54,gap=18,padL=44,padR=16,padT=16,padB=52,H=240,plotH=H-padT-padB;
+  const Wb=74,gap=20,padL=44,padR=16,padT=16,padB=54,H=240,plotH=H-padT-padB;
   const maxV=Math.max(TARGET,...stats.map(s=>s.avg))*1.15;
   const W=padL+padR+stats.length*Wb+(stats.length-1)*gap;
   const y=v=>padT+plotH-(v/maxV)*plotH, targetY=y(TARGET);
@@ -555,10 +578,10 @@ function renderChart(stats){
     const col=ok?'#12855a':'#c0392b', colBg=ok?'#dff3e8':'#fbe4e2';
     bars+=`<rect x="${x}" y="${padT}" width="${Wb}" height="${plotH}" fill="${colBg}" opacity=".35" rx="6"/><rect x="${x}" y="${by}" width="${Wb}" height="${bh}" fill="${col}" rx="6"/>
       <text x="${x+Wb/2}" y="${by-6}" text-anchor="middle" font-size="12" font-weight="700" fill="${col}">${fmt1(s.avg)}</text>
-      <text x="${x+Wb/2}" y="${H-padB+18}" text-anchor="middle" font-size="11" fill="#12314f">${thaiShort(s.date).replace(/ \d{4}$/,'')}</text>
+      <text x="${x+Wb/2}" y="${H-padB+18}" text-anchor="middle" font-size="10.5" fill="#12314f">${weekLabel(s.weekStart,s.weekEnd)}</text>
       <text x="${x+Wb/2}" y="${H-padB+33}" text-anchor="middle" font-size="10" fill="#5f7590">${s.n} ราย</text>`; });
   const tl=`<line x1="${padL}" y1="${targetY}" x2="${W-padR}" y2="${targetY}" stroke="#083f77" stroke-width="1.5" stroke-dasharray="6 4"/><text x="${W-padR}" y="${targetY-6}" text-anchor="end" font-size="11" font-weight="700" fill="#083f77">เป้าหมาย ${TARGET} นาที</text>`;
-  host.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${Math.max(W,320)}" height="${H}" role="img" aria-label="กราฟเวลารอเฉลี่ยรายวัน">${grid}${bars}${tl}</svg>`;
+  host.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${Math.max(W,320)}" height="${H}" role="img" aria-label="กราฟเวลารอเฉลี่ยรายสัปดาห์">${grid}${bars}${tl}</svg>`;
 }
 function renderAllTable(){
   const flat=flatValid(); const host=document.getElementById('allTable');
