@@ -235,13 +235,16 @@
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
         <div><h2>ภาพรวมทั้งหมด</h2><p class="sub" style="margin:0">สรุปจากข้อมูลที่บันทึกไว้ทั้งหมด</p></div>
-        <button class="btn primary" onclick="exportXlsx()">⬇ ส่งออก Excel (.xlsx)</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn primary" onclick="exportXlsx()">⬇ ส่งออก Excel (.xlsx)</button>
+          <button class="btn ghost" id="pptxBtn" onclick="exportPptx(this)">⬇ ส่งออก PowerPoint (.pptx)</button>
+        </div>
       </div>
       <div class="kpis" id="kpis" style="margin-top:14px"></div>
     </div>
     <div class="card">
       <h2>เวลารอเฉลี่ยรายสัปดาห์</h2>
-      <p class="sub">เส้นประคือเป้าหมาย 15 นาที · แท่งสีเขียว = ถึงเป้า, สีแดง = เกินเป้า · แต่ละสัปดาห์เริ่มวันจันทร์</p>
+      <p class="sub">แสดง 10 สัปดาห์ล่าสุด · แต่ละสัปดาห์นับใหม่ทุกต้นเดือน (เช่น เดือนกรกฎาคม สัปดาห์ที่ 1, 2, 3 …) · เส้นประคือเป้าหมาย 15 นาที</p>
       <div class="chartwrap" id="chart"></div>
     </div>
     <div class="card">
@@ -544,6 +547,29 @@ function weekStats(){
   return Object.keys(by).sort().map(wk=>{ const m=by[wk]; const n=m.length; const sum=m.reduce((a,b)=>a+b,0); const wkEnd=addDaysISO(wk,6);
     return {weekStart:wk,weekEnd:wkEnd,n,avg:sum/n,max:Math.max(...m),min:Math.min(...m),pass:m.filter(x=>x<=TARGET).length}; });
 }
+/* จับคู่แต่ละสัปดาห์ (จ-อา) เข้ากับเดือนปฏิทินที่มีวันทำการ (จ-ศ) อยู่มากที่สุด
+   แล้วเลขลำดับสัปดาห์นับใหม่ทุกต้นเดือน พร้อมช่วงวันที่แสดงเฉพาะวันที่อยู่ในเดือนนั้นจริง */
+function monthOfWeekLabels(){
+  const weeks=weekStats(); // เรียงจากเก่าไปใหม่อยู่แล้ว
+  const monthCounts={};
+  return weeks.map(s=>{
+    const workdays=[0,1,2,3,4].map(i=>addDaysISO(s.weekStart,i)); // จ..ศ ของสัปดาห์นี้
+    const tally={};
+    workdays.forEach(d=>{ const mk=d.slice(0,7); tally[mk]=(tally[mk]||0)+1; });
+    let monthKey=null,best=-1;
+    Object.keys(tally).forEach(mk=>{ if(tally[mk]>best){ best=tally[mk]; monthKey=mk; } });
+    const inMonth=workdays.filter(d=>d.slice(0,7)===monthKey);
+    const rs=inMonth[0], re=inMonth[inMonth.length-1];
+    monthCounts[monthKey]=(monthCounts[monthKey]||0)+1;
+    const weekNo=monthCounts[monthKey];
+    const mIdx=Number(monthKey.split('-')[1])-1;
+    const dS=parseISO(rs).getDate(), dE=parseISO(re).getDate();
+    const dayRange= dS===dE? String(dS) : (dS+'-'+dE);
+    const labelLines=[TH_MON_SHORT[mIdx]+' สัปดาห์ '+weekNo, '('+dayRange+')'];
+    const fullTitle='เดือน'+TH_MONTH[mIdx]+' สัปดาห์ที่ '+weekNo+' (วันที่ '+dayRange+')';
+    return Object.assign({}, s, {labelLines, fullTitle});
+  });
+}
 /* รวมข้อมูลทุกวันเข้าด้วยกันตาม "วันในสัปดาห์" (จันทร์..ศุกร์) ตัดเสาร์-อาทิตย์ออก → ได้ 5 แท่งเสมอ */
 function dowStats(){
   const labels=['จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์'];
@@ -564,7 +590,8 @@ function renderSummary(){
     <div class="kpi"><div class="v">${totalRec}</div><div class="l">ผู้ป่วยทั้งหมด (ราย)</div></div>
     <div class="kpi"><div class="v" style="color:${overallAvg<=TARGET?'var(--ok)':'var(--over)'}">${fmt1(overallAvg)}</div><div class="l">เวลารอเฉลี่ย (นาที)</div></div>
     <div class="kpi"><div class="v small" style="color:${passPct>=80?'var(--ok)':'var(--amber)'}">${passPct}%</div><div class="l">ถึงเป้า ≤15 นาที (${passCnt}/${totalRec})</div></div>`;
-  renderChart(weekStats(), s=>weekLabel(s.weekStart,s.weekEnd), 'chart', 'กราฟเวลารอเฉลี่ยรายสัปดาห์');
+  const weekLabeled = monthOfWeekLabels().slice(-10);
+  renderChart(weekLabeled, s=>s.labelLines, 'chart', 'กราฟเวลารอเฉลี่ยรายสัปดาห์ (10 สัปดาห์ล่าสุด)', s=>s.fullTitle);
   renderChart(dowStats(), s=>s.label, 'chartDow', 'กราฟเวลารอเฉลี่ยแยกตามวันในสัปดาห์');
   renderDayCards(stats); renderAllTable();
 }
@@ -581,11 +608,14 @@ function renderDayCards(stats){
       </div><div class="pass" style="color:${pass>=80?'var(--ok)':'var(--amber)'}">ถึงเป้า ${s.pass}/${s.n} (${pass}%)</div></div>`;
   }).join('');
 }
-function renderChart(stats, labelFn, hostId, ariaLabel){
+function renderChart(stats, labelFn, hostId, ariaLabel, titleFn){
   hostId=hostId||'chart'; labelFn=labelFn||(s=>weekLabel(s.weekStart,s.weekEnd));
   const host=document.getElementById(hostId);
   if(!stats.length || stats.every(s=>s.n===0)){ host.innerHTML='<div class="empty">ยังไม่มีข้อมูลสำหรับแสดงกราฟ</div>'; return; }
-  const Wb=74,gap=20,padL=44,padR=16,padT=16,padB=54,H=240,plotH=H-padT-padB;
+  const linesArr=stats.map(s=>{ const l=labelFn(s); return Array.isArray(l)?l:[l]; });
+  const maxLines=Math.max(...linesArr.map(a=>a.length));
+  const lineH=13, totalLines=maxLines+1; // +1 สำหรับบรรทัด "N ราย"
+  const Wb=74,gap=20,padL=44,padR=16,padT=16,plotH=170,padB=18+totalLines*lineH+8,H=padT+plotH+padB;
   const maxV=Math.max(TARGET,...stats.map(s=>s.avg))*1.15;
   const W=padL+padR+stats.length*Wb+(stats.length-1)*gap;
   const y=v=>padT+plotH-(v/maxV)*plotH, targetY=y(TARGET);
@@ -594,10 +624,13 @@ function renderChart(stats, labelFn, hostId, ariaLabel){
   let bars='';
   stats.forEach((s,i)=>{ const x=padL+i*(Wb+gap), bh=Math.max(s.n?2:0,(s.avg/maxV)*plotH), by=padT+plotH-bh, ok=s.n>0&&s.avg<=TARGET;
     const col=s.n===0?'#c7d4e2':(ok?'#12855a':'#c0392b'), colBg=s.n===0?'#eef3f9':(ok?'#dff3e8':'#fbe4e2');
-    bars+=`<rect x="${x}" y="${padT}" width="${Wb}" height="${plotH}" fill="${colBg}" opacity=".35" rx="6"/><rect x="${x}" y="${by}" width="${Wb}" height="${bh}" fill="${col}" rx="6"/>
+    const titleTag=titleFn?`<title>${xmlEsc(titleFn(s))}</title>`:'';
+    let ly=H-padB+18, labelTxt='';
+    linesArr[i].forEach(txt=>{ labelTxt+=`<text x="${x+Wb/2}" y="${ly}" text-anchor="middle" font-size="10.5" fill="#12314f">${txt}</text>`; ly+=lineH; });
+    labelTxt+=`<text x="${x+Wb/2}" y="${ly}" text-anchor="middle" font-size="10" fill="#5f7590">${s.n} ราย</text>`;
+    bars+=`<g>${titleTag}<rect x="${x}" y="${padT}" width="${Wb}" height="${plotH}" fill="${colBg}" opacity=".35" rx="6"/><rect x="${x}" y="${by}" width="${Wb}" height="${bh}" fill="${col}" rx="6"/>
       <text x="${x+Wb/2}" y="${by-6}" text-anchor="middle" font-size="12" font-weight="700" fill="${col}">${s.n?fmt1(s.avg):'-'}</text>
-      <text x="${x+Wb/2}" y="${H-padB+18}" text-anchor="middle" font-size="10.5" fill="#12314f">${labelFn(s)}</text>
-      <text x="${x+Wb/2}" y="${H-padB+33}" text-anchor="middle" font-size="10" fill="#5f7590">${s.n} ราย</text>`; });
+      ${labelTxt}</g>`; });
   const tl=`<line x1="${padL}" y1="${targetY}" x2="${W-padR}" y2="${targetY}" stroke="#083f77" stroke-width="1.5" stroke-dasharray="6 4"/><text x="${W-padR}" y="${targetY-6}" text-anchor="end" font-size="11" font-weight="700" fill="#083f77">เป้าหมาย ${TARGET} นาที</text>`;
   host.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${Math.max(W,320)}" height="${H}" role="img" aria-label="${ariaLabel||'กราฟเวลารอเฉลี่ย'}">${grid}${bars}${tl}</svg>`;
 }
@@ -672,6 +705,143 @@ function exportXlsx(){
   const blob=new Blob([zipStore(files)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='เวลารอเอกซเรย์_'+todayISO()+'.xlsx';
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+
+/* ============================================================
+   ส่งออก PowerPoint (.pptx) — ออฟไลน์ ไม่พึ่งไลบรารีภายนอก
+   แปลงกราฟ SVG ที่แสดงอยู่บนหน้าจอเป็นรูป PNG แล้วฝังลงสไลด์
+   ============================================================ */
+function svgToPngBytes(svgEl, scale){
+  return new Promise((resolve,reject)=>{
+    try{
+      const vb=svgEl.viewBox && svgEl.viewBox.baseVal;
+      const w=(vb&&vb.width)||(svgEl.width&&svgEl.width.baseVal&&svgEl.width.baseVal.value)||800;
+      const h=(vb&&vb.height)||(svgEl.height&&svgEl.height.baseVal&&svgEl.height.baseVal.value)||300;
+      const xml=new XMLSerializer().serializeToString(svgEl);
+      const svg64=btoa(unescape(encodeURIComponent(xml)));
+      const img=new Image();
+      img.onload=()=>{
+        const canvas=document.createElement('canvas');
+        canvas.width=Math.max(1,Math.round(w*scale)); canvas.height=Math.max(1,Math.round(h*scale));
+        const ctx=canvas.getContext('2d');
+        ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.drawImage(img,0,0,canvas.width,canvas.height);
+        canvas.toBlob(blob=>{
+          if(!blob){ reject(new Error('แปลงกราฟเป็นรูปภาพไม่สำเร็จ')); return; }
+          const reader=new FileReader();
+          reader.onload=()=>resolve({bytes:new Uint8Array(reader.result),w,h});
+          reader.onerror=()=>reject(new Error('อ่านข้อมูลรูปภาพไม่สำเร็จ'));
+          reader.readAsArrayBuffer(blob);
+        },'image/png');
+      };
+      img.onerror=()=>reject(new Error('โหลดกราฟ SVG ไม่สำเร็จ'));
+      img.src='data:image/svg+xml;base64,'+svg64;
+    }catch(e){ reject(e); }
+  });
+}
+function fitBox(imgW,imgH,maxCx,maxCy){
+  const arImg=imgW/imgH, arBox=maxCx/maxCy;
+  return arImg>arBox ? {cx:maxCx, cy:Math.round(maxCx/arImg)} : {cy:maxCy, cx:Math.round(maxCy*arImg)};
+}
+const SLIDE_W=12192000, SLIDE_H=6858000;
+function pptxTitleShape(id,text,y,sz,color){
+  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="Text ${id}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="457200" y="${y}"/><a:ext cx="11277600" cy="762000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr><p:txBody><a:bodyPr wrap="square"><a:noAutofit/></a:bodyPr><a:lstStyle/><a:p><a:r><a:rPr lang="th-TH" sz="${sz}" b="1"><a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:latin typeface="Tahoma"/><a:cs typeface="Tahoma"/></a:rPr><a:t>${xmlEsc(text)}</a:t></a:r></a:p></p:txBody></p:sp>`;
+}
+function pptxBodyShape(id,lines,y,cy,sz){
+  const paras=lines.map(t=>`<a:p><a:r><a:rPr lang="th-TH" sz="${sz}"><a:solidFill><a:srgbClr val="12314F"/></a:solidFill><a:latin typeface="Tahoma"/><a:cs typeface="Tahoma"/></a:rPr><a:t>${xmlEsc(t)}</a:t></a:r></a:p>`).join('');
+  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="Body ${id}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="457200" y="${y}"/><a:ext cx="11277600" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr><p:txBody><a:bodyPr wrap="square"><a:noAutofit/></a:bodyPr><a:lstStyle/>${paras}</p:txBody></p:sp>`;
+}
+function pptxPicShape(id,rid,x,y,cx,cy){
+  return `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="Picture ${id}"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x="${x}" y="${y}"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`;
+}
+function pptxSlideXml(shapesXml){
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>${shapesXml}</p:spTree></p:cSld><p:clrMapOvr><a:overrideClrMapping bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/></p:clrMapOvr></p:sld>`;
+}
+function pptxSlideRels(extra){
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdLayout" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>${extra||''}</Relationships>`;
+}
+async function exportPptx(btn){
+  const chartSvg=document.querySelector('#chart svg');
+  const dowSvg=document.querySelector('#chartDow svg');
+  if(!chartSvg||!dowSvg){ alert('ยังไม่มีกราฟให้ส่งออก กรุณารอให้กราฟแสดงผลก่อน (อยู่ที่แท็บ "สรุปผล" แล้ว)'); return; }
+  const origLabel=btn?btn.textContent:'';
+  try{
+    if(btn){ btn.disabled=true; btn.textContent='กำลังสร้างไฟล์…'; }
+    const [chartImg,dowImg]=await Promise.all([svgToPngBytes(chartSvg,2), svgToPngBytes(dowSvg,2)]);
+
+    const flat=flatValid(), totalRec=flat.length, totalDays=dayStats().length;
+    const overallAvg=totalRec?flat.reduce((a,b)=>a+b.min,0)/totalRec:0;
+    const passCnt=flat.filter(r=>r.min<=TARGET).length, passPct=totalRec?Math.round(passCnt/totalRec*100):0;
+    const genDate=thaiFull(todayISO());
+
+    // สไลด์ 1: หน้าปก + สรุป KPI
+    const slide1Shapes=
+      pptxTitleShape(2,'สรุปผลเวลารอเอกซเรย์',900000,3200,'0B5CAB')+
+      pptxBodyShape(3,['กลุ่มงานรังสีวิทยา · สร้างรายงานเมื่อ '+genDate],1750000,500000,1400)+
+      pptxBodyShape(4,[
+        'จำนวนวันที่บันทึก: '+totalDays+' วัน',
+        'ผู้ป่วยทั้งหมด: '+totalRec+' ราย',
+        'เวลารอเฉลี่ย: '+fmt1(overallAvg)+' นาที',
+        'ถึงเป้าหมาย ≤15 นาที: '+passPct+'% ('+passCnt+'/'+totalRec+' ราย)'
+      ],2600000,3000000,2000);
+    const slide1Xml=pptxSlideXml(slide1Shapes), slide1Rels=pptxSlideRels('');
+
+    // สไลด์ 2: กราฟรายสัปดาห์
+    const fit2=fitBox(chartImg.w,chartImg.h,10820400,4800000);
+    const off2x=Math.round((SLIDE_W-fit2.cx)/2);
+    const slide2Shapes=
+      pptxTitleShape(2,'เวลารอเฉลี่ยรายสัปดาห์ (10 สัปดาห์ล่าสุด)',350000,2400,'0B5CAB')+
+      pptxPicShape(3,'rId2',off2x,1450000,fit2.cx,fit2.cy);
+    const slide2Xml=pptxSlideXml(slide2Shapes);
+    const slide2Rels=pptxSlideRels('<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/>');
+
+    // สไลด์ 3: กราฟแยกตามวันในสัปดาห์
+    const fit3=fitBox(dowImg.w,dowImg.h,10820400,4800000);
+    const off3x=Math.round((SLIDE_W-fit3.cx)/2);
+    const slide3Shapes=
+      pptxTitleShape(2,'เวลารอเฉลี่ยแยกตามวันในสัปดาห์ (จันทร์-ศุกร์)',350000,2400,'0B5CAB')+
+      pptxPicShape(3,'rId2',off3x,1450000,fit3.cx,fit3.cy);
+    const slide3Xml=pptxSlideXml(slide3Shapes);
+    const slide3Rels=pptxSlideRels('<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image2.png"/>');
+
+    const contentTypes=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/><Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/><Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/><Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/><Override PartName="/ppt/slides/slide2.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/><Override PartName="/ppt/slides/slide3.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/></Types>`;
+    const rootRels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>`;
+    const presentationXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst><p:sldId id="256" r:id="rId2"/><p:sldId id="257" r:id="rId3"/><p:sldId id="258" r:id="rId4"/></p:sldIdLst><p:sldSz cx="${SLIDE_W}" cy="${SLIDE_H}"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`;
+    const presentationRels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide2.xml"/><Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide3.xml"/><Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/></Relationships>`;
+    const slideMasterXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:effectLst/></p:bgPr></p:bg><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst></p:sldMaster>`;
+    const slideMasterRels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/></Relationships>`;
+    const slideLayoutXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="blank" preserve="1"><p:cSld name="Blank"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMapOvr><a:overrideClrMapping bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/></p:clrMapOvr></p:sldLayout>`;
+    const slideLayoutRels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>`;
+    const themeXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="XrayTheme"><a:themeElements><a:clrScheme name="Xray"><a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="083F77"/></a:dk2><a:lt2><a:srgbClr val="E8F1FB"/></a:lt2><a:accent1><a:srgbClr val="0B5CAB"/></a:accent1><a:accent2><a:srgbClr val="12855A"/></a:accent2><a:accent3><a:srgbClr val="C0392B"/></a:accent3><a:accent4><a:srgbClr val="B9770C"/></a:accent4><a:accent5><a:srgbClr val="5F7590"/></a:accent5><a:accent6><a:srgbClr val="12314F"/></a:accent6><a:hlink><a:srgbClr val="0B5CAB"/></a:hlink><a:folHlink><a:srgbClr val="083F77"/></a:folHlink></a:clrScheme><a:fontScheme name="Xray"><a:majorFont><a:latin typeface="Tahoma"/><a:ea typeface=""/><a:cs typeface="Tahoma"/></a:majorFont><a:minorFont><a:latin typeface="Tahoma"/><a:ea typeface=""/><a:cs typeface="Tahoma"/></a:minorFont></a:fontScheme><a:fmtScheme name="Xray"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="12700"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="19050"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>`;
+
+    const enc=s=>new TextEncoder().encode(s);
+    const files=[
+      {name:'[Content_Types].xml',bytes:enc(contentTypes)},
+      {name:'_rels/.rels',bytes:enc(rootRels)},
+      {name:'ppt/presentation.xml',bytes:enc(presentationXml)},
+      {name:'ppt/_rels/presentation.xml.rels',bytes:enc(presentationRels)},
+      {name:'ppt/slideMasters/slideMaster1.xml',bytes:enc(slideMasterXml)},
+      {name:'ppt/slideMasters/_rels/slideMaster1.xml.rels',bytes:enc(slideMasterRels)},
+      {name:'ppt/slideLayouts/slideLayout1.xml',bytes:enc(slideLayoutXml)},
+      {name:'ppt/slideLayouts/_rels/slideLayout1.xml.rels',bytes:enc(slideLayoutRels)},
+      {name:'ppt/theme/theme1.xml',bytes:enc(themeXml)},
+      {name:'ppt/slides/slide1.xml',bytes:enc(slide1Xml)},
+      {name:'ppt/slides/_rels/slide1.xml.rels',bytes:enc(slide1Rels)},
+      {name:'ppt/slides/slide2.xml',bytes:enc(slide2Xml)},
+      {name:'ppt/slides/_rels/slide2.xml.rels',bytes:enc(slide2Rels)},
+      {name:'ppt/slides/slide3.xml',bytes:enc(slide3Xml)},
+      {name:'ppt/slides/_rels/slide3.xml.rels',bytes:enc(slide3Rels)},
+      {name:'ppt/media/image1.png',bytes:chartImg.bytes},
+      {name:'ppt/media/image2.png',bytes:dowImg.bytes},
+    ];
+    const blob2=new Blob([zipStore(files)],{type:'application/vnd.openxmlformats-officedocument.presentationml.presentation'});
+    const a2=document.createElement('a'); a2.href=URL.createObjectURL(blob2); a2.download='เวลารอเอกซเรย์_'+todayISO()+'.pptx';
+    document.body.appendChild(a2); a2.click(); a2.remove(); setTimeout(()=>URL.revokeObjectURL(a2.href),2000);
+  }catch(err){
+    alert('สร้างไฟล์ PowerPoint ไม่สำเร็จ: '+err.message);
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent=origLabel||'⬇ ส่งออก PowerPoint (.pptx)'; }
+  }
 }
 
 /* ============================================================
